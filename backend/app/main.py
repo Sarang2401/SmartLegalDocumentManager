@@ -1,0 +1,25 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import settings
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    description="A system to manage legal document versions with full traceability.",
+    version="1.0.0",
+)
+
+# CORS — allow the React frontend to call the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health", tags=["Health"])
+def health_check():
+    """Simple health check endpoint."""
+    return {"status": "healthy", "app": settings.APP_NAME}
