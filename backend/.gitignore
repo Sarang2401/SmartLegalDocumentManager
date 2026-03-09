@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Alembic
+alembic/versions/*.pyc

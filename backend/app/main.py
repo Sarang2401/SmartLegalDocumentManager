@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+import app.models  # noqa: F401 — ensures all models are registered with Base.metadata
+
 
 app = FastAPI(
     title=settings.APP_NAME,
