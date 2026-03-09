@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 import app.models  # noqa: F401 — ensures all models are registered with Base.metadata
+from app.routes.documents import router as documents_router
 
 
 app = FastAPI(
@@ -19,6 +20,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Routers
+app.include_router(documents_router)
 
 
 @app.get("/health", tags=["Health"])
