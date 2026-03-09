@@ -157,3 +157,20 @@ def delete_version(
         if "final remaining" in msg:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+
+
+# ── GET /documents/{id}/timeline ──────────────────────────────────────────────
+
+from app.schemas.document import AuditLogResponse
+
+@router.get("/{document_id}/timeline", response_model=list[AuditLogResponse])
+def get_timeline(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Fetch activity timeline (audit logs) for a document."""
+    try:
+        logs = svc.fetch_timeline(db, document_id=document_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return logs

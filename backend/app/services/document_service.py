@@ -239,3 +239,12 @@ def delete_version(
 
     db.delete(ver)
     db.commit()
+
+
+def fetch_timeline(db: Session, document_id: UUID) -> list:
+    """Fetch chronological activity timeline for a document."""
+    doc = repo.get_document(db, document_id)
+    if doc is None:
+        raise ValueError("Document not found.")
+    
+    return repo.get_audit_logs(db, document_id)

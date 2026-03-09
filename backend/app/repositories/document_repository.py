@@ -107,3 +107,12 @@ def create_audit_log(
     )
     db.add(log)
     return log
+
+
+def get_audit_logs(db: Session, document_id: UUID) -> list[AuditLog]:
+    return (
+        db.query(AuditLog)
+        .filter(AuditLog.document_id == document_id)
+        .order_by(AuditLog.timestamp)
+        .all()
+    )

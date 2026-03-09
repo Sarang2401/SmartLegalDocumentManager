@@ -61,3 +61,17 @@ class CompareResponse(BaseModel):
     diff: list[str]
     added: list[str]
     removed: list[str]
+
+
+# ── AuditLog ─────────────────────────────────────────────────────────────────
+
+class AuditLogResponse(BaseModel):
+    id: UUID
+    document_id: UUID
+    version_id: Optional[UUID] = None
+    action: str
+    user: str
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
