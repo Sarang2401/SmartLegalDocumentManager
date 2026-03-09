@@ -82,6 +82,14 @@ def get_version_by_number(
     )
 
 
+def count_versions(db: Session, document_id: UUID) -> int:
+    return (
+        db.query(DocumentVersion)
+        .filter(DocumentVersion.document_id == document_id)
+        .count()
+    )
+
+
 # ── AuditLog ──────────────────────────────────────────────────────────────────
 
 def create_audit_log(

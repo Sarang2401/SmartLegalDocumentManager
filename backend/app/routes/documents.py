@@ -90,3 +90,70 @@ def compare_versions(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return result
+
+
+# ── PATCH /documents/{id}/title ───────────────────────────────────────────────
+
+from app.schemas.document import DocumentTitleUpdate
+
+@router.patch("/{document_id}/title", response_model=DocumentResponse)
+def update_title(
+    document_id: UUID,
+    payload: DocumentTitleUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update document title without creating a new version."""
+    try:
+        doc = svc.update_title(
+            db,
+            document_id=document_id,
+            new_title=payload.title,
+            modified_by=payload.modified_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return doc
+
+
+# ── DELETE /documents/{id} ────────────────────────────────────────────────────
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: UUID,
+    modified_by: str,
+    db: Session = Depends(get_db),
+):
+    """Soft delete a document. Requires modified_by as a query parameter for audit log."""
+    try:
+        svc.delete_document(
+            db,
+            document_id=document_id,
+            modified_by=modified_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+# ── DELETE /documents/{id}/versions/{version} ─────────────────────────────────
+
+@router.delete("/{document_id}/versions/{version_number}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_version(
+    document_id: UUID,
+    version_number: int,
+    modified_by: str,
+    db: Session = Depends(get_db),
+):
+    """Delete a specific version. Cannot delete if it is the only remaining version.
+    Requires modified_by as query parameter."""
+    try:
+        svc.delete_version(
+            db,
+            document_id=document_id,
+            version_number=version_number,
+            modified_by=modified_by,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "final remaining" in msg:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)

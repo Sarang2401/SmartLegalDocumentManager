@@ -15,6 +15,11 @@ class DocumentCreate(BaseModel):
     created_by: str = Field(..., min_length=1, max_length=255)
 
 
+class DocumentTitleUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=512)
+    modified_by: str = Field(..., min_length=1, max_length=255)
+
+
 class DocumentResponse(BaseModel):
     id: UUID
     title: str

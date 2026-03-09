@@ -31,7 +31,6 @@ class DocumentVersion(Base):
     audit_logs = relationship(
         "AuditLog",
         back_populates="version",
-        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:

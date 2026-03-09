@@ -174,3 +174,68 @@ def compare_versions(
         "added": added,
         "removed": removed,
     }
+
+
+def update_title(
+    db: Session, document_id: UUID, new_title: str, modified_by: str
+) -> Document:
+    """Update a document's title without creating a new version."""
+    doc = repo.get_document(db, document_id)
+    if doc is None:
+        raise ValueError("Document not found.")
+
+    doc.title = new_title
+    repo.create_audit_log(
+        db,
+        document_id=document_id,
+        action="UPDATE_TITLE",
+        user=modified_by,
+    )
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+def delete_document(db: Session, document_id: UUID, modified_by: str) -> None:
+    """Soft delete a document. (History stays intact)."""
+    doc = repo.get_document(db, document_id)
+    if doc is None:
+        raise ValueError("Document not found.")
+
+    doc.is_deleted = True
+    repo.create_audit_log(
+        db,
+        document_id=document_id,
+        action="DELETE_DOCUMENT",
+        user=modified_by,
+    )
+    db.commit()
+
+
+def delete_version(
+    db: Session, document_id: UUID, version_number: int, modified_by: str
+) -> None:
+    """Hard delete a specific version. Cannot delete the final remaining version."""
+    doc = repo.get_document(db, document_id)
+    if doc is None:
+        raise ValueError("Document not found.")
+
+    version_count = repo.count_versions(db, document_id)
+    if version_count <= 1:
+        raise ValueError("Cannot delete the final remaining version.")
+
+    ver = repo.get_version_by_number(db, document_id, version_number)
+    if ver is None:
+        raise ValueError(f"Version {version_number} not found.")
+
+    # Record audit log before hard deleting the version
+    repo.create_audit_log(
+        db,
+        document_id=document_id,
+        action="DELETE_VERSION",
+        user=modified_by,
+        version_id=ver.id,
+    )
+
+    db.delete(ver)
+    db.commit()
