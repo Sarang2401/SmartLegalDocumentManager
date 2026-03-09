@@ -68,6 +68,11 @@ def create_document(
     return doc, version
 
 
+def list_documents(db: Session) -> list[Document]:
+    """Retrieve a list of all active documents."""
+    return repo.get_all_documents(db)
+
+
 def upload_version(
     db: Session,
     document_id: UUID,

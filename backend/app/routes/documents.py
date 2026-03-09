@@ -16,6 +16,14 @@ from app.services import document_service as svc
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
+# ── GET /documents ────────────────────────────────────────────────────────────
+
+@router.get("", response_model=list[DocumentResponse])
+def list_documents(db: Session = Depends(get_db)):
+    """List all active documents."""
+    return svc.list_documents(db)
+
+
 # ── POST /documents ───────────────────────────────────────────────────────────
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)

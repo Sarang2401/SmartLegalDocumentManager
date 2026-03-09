@@ -31,6 +31,15 @@ def get_document(db: Session, document_id: UUID) -> Optional[Document]:
     )
 
 
+def get_all_documents(db: Session) -> list[Document]:
+    return (
+        db.query(Document)
+        .filter(Document.is_deleted == False)  # noqa: E712
+        .order_by(Document.updated_at.desc())
+        .all()
+    )
+
+
 # ── DocumentVersion ───────────────────────────────────────────────────────────
 
 def create_version(
