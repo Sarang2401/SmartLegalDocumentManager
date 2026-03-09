@@ -38,6 +38,23 @@ export const VersionCompare = () => {
     const simRatio = (compareData.similarity * 100).toFixed(1);
     const isIdentical = compareData.similarity === 1;
 
+    // Risk keywords highlight (Helper)
+    const highlightRiskyKeywords = (text: string) => {
+        const riskyWords = ['payment', 'liability', 'termination', 'confidentiality'];
+        const regex = new RegExp(`\\b(${riskyWords.join('|')})\\b`, 'gi');
+
+        // If there is no risky word, just return text
+        if (!regex.test(text)) return text;
+
+        // Split by regex
+        const chunks = text.split(new RegExp(`(\\b(?:${riskyWords.join('|')})\\b)`, 'gi'));
+        return chunks.map((chunk, i) =>
+            riskyWords.includes(chunk.toLowerCase()) ? (
+                <span key={i} className="bg-red-200 text-red-900 font-bold px-1 rounded">{chunk}</span>
+            ) : chunk
+        );
+    };
+
     // Render Diff Lines
     const renderDiffLines = () => {
         return compareData.diff.map((line, idx) => {
@@ -53,21 +70,28 @@ export const VersionCompare = () => {
             let bgColor = '';
             let textColor = 'text-[color:var(--text-main)]';
             let icon = null;
+            let isModified = false;
 
             if (line.startsWith('+')) {
                 bgColor = 'bg-[color:var(--diff-add-bg)]';
                 textColor = 'text-[color:var(--diff-add-text)]';
                 icon = '+';
+                isModified = true;
             } else if (line.startsWith('-')) {
                 bgColor = 'bg-[color:var(--diff-del-bg)]';
                 textColor = 'text-[color:var(--diff-del-text)]';
                 icon = '-';
+                isModified = true;
             }
+
+            const rawText = line.substring(1);
 
             return (
                 <div key={idx} className={`flex px-4 py-1.5 font-mono text-sm ${bgColor} ${textColor} hover:bg-black/5 transition-colors`}>
                     <div className="w-8 select-none text-opacity-50 text-[color:var(--text-lighter)]">{icon || '\u00A0'}</div>
-                    <div className="flex-1 whitespace-pre-wrap">{line.substring(1)}</div>
+                    <div className="flex-1 whitespace-pre-wrap">
+                        {isModified ? highlightRiskyKeywords(rawText) : rawText}
+                    </div>
                 </div>
             );
         });

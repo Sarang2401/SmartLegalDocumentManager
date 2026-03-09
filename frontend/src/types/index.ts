@@ -50,3 +50,11 @@ export interface DocumentTitleUpdatePayload {
     title: string;
     modified_by: string;
 }
+
+export interface RestoreRequestPayload {
+    restored_by: string;
+}
+
+export interface PreviewRequestPayload {
+    content: string;
+}

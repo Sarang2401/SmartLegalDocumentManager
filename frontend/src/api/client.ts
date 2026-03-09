@@ -6,6 +6,8 @@ import type {
     DocumentCreatePayload,
     VersionCreatePayload,
     DocumentTitleUpdatePayload,
+    RestoreRequestPayload,
+    PreviewRequestPayload,
 } from '../types';
 
 const API_BASE = 'http://localhost:8000/documents';
@@ -64,9 +66,13 @@ export const api = {
         request<VersionResponse>(`/${docId}/versions`, { method: 'POST', body: JSON.stringify(data) }),
     deleteVersion: (docId: string, versionNumber: number, user: string) =>
         request<void>(`/${docId}/versions/${versionNumber}?modified_by=${encodeURIComponent(user)}`, { method: 'DELETE' }),
+    restoreVersion: (docId: string, versionNumber: number, data: RestoreRequestPayload) =>
+        request<VersionResponse>(`/${docId}/restore/${versionNumber}`, { method: 'POST', body: JSON.stringify(data) }),
 
     // Logs & Diff
     getTimeline: (docId: string) => request<AuditLogResponse[]>(`/${docId}/timeline`),
     compareVersions: (docId: string, v1: number, v2: number) =>
         request<CompareResponse>(`/${docId}/compare?v1=${v1}&v2=${v2}`),
+    previewDiff: (docId: string, data: PreviewRequestPayload) =>
+        request<CompareResponse>(`/${docId}/preview`, { method: 'POST', body: JSON.stringify(data) }),
 };
