@@ -1,171 +1,199 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, AlertTriangle, FileWarning, ArrowRight } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertTriangle, TrendingDown, GitCompareArrows } from 'lucide-react';
 import { api } from '../api/client';
 import type { CompareResponse, DocumentResponse } from '../types';
+import { Badge } from '../components/Badge';
+
+const RISK_WORDS = ['payment', 'liability', 'termination', 'confidentiality', 'indemnity', 'penalty'];
+
+function highlightRisk(text: string) {
+    const regex = new RegExp(`(\\b(?:${RISK_WORDS.join('|')})\\b)`, 'gi');
+    if (!regex.test(text)) return <>{text}</>;
+    return <>{text.split(new RegExp(`(\\b(?:${RISK_WORDS.join('|')})\\b)`, 'gi')).map((c, i) =>
+        RISK_WORDS.includes(c.toLowerCase())
+            ? <span key={i} style={{ background: '#fef3c7', color: '#92400e', fontWeight: 700, padding: '1px 4px', borderRadius: '3px', border: '1px solid #fde68a' }}>{c}</span>
+            : c
+    )}</>;
+}
 
 export const VersionCompare = () => {
     const { id, v1, v2 } = useParams<{ id: string; v1: string; v2: string }>();
     const [doc, setDoc] = useState<DocumentResponse | null>(null);
-    const [compareData, setCompareData] = useState<CompareResponse | null>(null);
+    const [data, setData] = useState<CompareResponse | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        if (id && v1 && v2) {
-            loadData();
-        }
-    }, [id, v1, v2]);
+    useEffect(() => { if (id && v1 && v2) loadData(); }, [id, v1, v2]);
 
     const loadData = async () => {
         try {
             setLoading(true);
             const docs = await api.getDocuments();
-            const currentDoc = docs.find(d => d.id === id);
-            if (currentDoc) setDoc(currentDoc);
-
-            const data = await api.compareVersions(id!, parseInt(v1!), parseInt(v2!));
-            setCompareData(data);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+            setDoc(docs.find(d => d.id === id) || null);
+            setData(await api.compareVersions(id!, parseInt(v1!), parseInt(v2!)));
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
     };
 
-    if (loading) return <div className="py-12 text-center text-[color:var(--text-muted)] animate-pulse">Computing differences...</div>;
-    if (!compareData || !doc) return <div className="py-12 text-center text-red-500">Comparison data not found</div>;
+    if (loading) return <div style={{ padding: '64px', textAlign: 'center', color: 'var(--text-muted)' }} className="animate-pulse">Computing legal diff…</div>;
+    if (!data || !doc) return <div style={{ padding: '64px', textAlign: 'center', color: 'var(--danger-text)' }}>Comparison data not found.</div>;
 
-    const simRatio = (compareData.similarity * 100).toFixed(1);
-    const isIdentical = compareData.similarity === 1;
-
-    // Risk keywords highlight (Helper)
-    const highlightRiskyKeywords = (text: string) => {
-        const riskyWords = ['payment', 'liability', 'termination', 'confidentiality'];
-        const regex = new RegExp(`\\b(${riskyWords.join('|')})\\b`, 'gi');
-
-        // If there is no risky word, just return text
-        if (!regex.test(text)) return text;
-
-        // Split by regex
-        const chunks = text.split(new RegExp(`(\\b(?:${riskyWords.join('|')})\\b)`, 'gi'));
-        return chunks.map((chunk, i) =>
-            riskyWords.includes(chunk.toLowerCase()) ? (
-                <span key={i} className="bg-red-200 text-red-900 font-bold px-1 rounded">{chunk}</span>
-            ) : chunk
-        );
-    };
-
-    // Render Diff Lines
-    const renderDiffLines = () => {
-        return compareData.diff.map((line, idx) => {
-            // Handle unified diff headers
-            if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
-                return (
-                    <div key={idx} className="bg-[color:var(--bg-hover)] px-4 py-2 text-xs font-mono text-[color:var(--text-lighter)] border-b border-[color:var(--border-light)]">
-                        {line}
-                    </div>
-                );
-            }
-
-            let bgColor = '';
-            let textColor = 'text-[color:var(--text-main)]';
-            let icon = null;
-            let isModified = false;
-
-            if (line.startsWith('+')) {
-                bgColor = 'bg-[color:var(--diff-add-bg)]';
-                textColor = 'text-[color:var(--diff-add-text)]';
-                icon = '+';
-                isModified = true;
-            } else if (line.startsWith('-')) {
-                bgColor = 'bg-[color:var(--diff-del-bg)]';
-                textColor = 'text-[color:var(--diff-del-text)]';
-                icon = '-';
-                isModified = true;
-            }
-
-            const rawText = line.substring(1);
-
-            return (
-                <div key={idx} className={`flex px-4 py-1.5 font-mono text-sm ${bgColor} ${textColor} hover:bg-black/5 transition-colors`}>
-                    <div className="w-8 select-none text-opacity-50 text-[color:var(--text-lighter)]">{icon || '\u00A0'}</div>
-                    <div className="flex-1 whitespace-pre-wrap">
-                        {isModified ? highlightRiskyKeywords(rawText) : rawText}
-                    </div>
-                </div>
-            );
-        });
-    };
+    const simPct = (data.similarity * 100).toFixed(1);
+    const isIdentical = data.similarity === 1;
+    const changeLevel = data.similarity >= 0.98 ? 'minor' : data.similarity >= 0.8 ? 'moderate' : 'significant';
+    const changeBadgeVariant = changeLevel === 'minor' ? 'success' : changeLevel === 'moderate' ? 'warning' : 'danger';
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            {/* Header */}
-            <div className="flex items-center gap-4 border-b border-[color:var(--border-light)] pb-6">
-                <Link to={`/documents/${id}`} className="rounded-full p-2 hover:bg-[color:var(--bg-hover)] transition-colors">
-                    <ArrowLeft size={20} className="text-[color:var(--text-muted)]" />
+        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+            {/* ── Hero Header ─────────────────────────────────────────── */}
+            <div style={{ background: 'linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)', borderRadius: 'var(--radius-xl)', padding: '28px 32px', boxShadow: 'var(--shadow-lg)', color: '#fff' }}>
+                <Link to={`/documents/${id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: 'rgba(255,255,255,0.55)', marginBottom: '16px', textDecoration: 'none' }}>
+                    <ArrowLeft size={14} /> Back to Document
                 </Link>
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-[color:var(--text-main)]">Document Comparison</h1>
-                    <p className="text-[color:var(--text-muted)] mt-1 flex items-center gap-2">
-                        {doc.title}
-                    </p>
-                </div>
-            </div>
-
-            {/* Summary Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-center gap-4 rounded-xl border border-[color:var(--border-light)] bg-white p-5 shadow-sm">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                        <ArrowRight size={24} />
-                    </div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                     <div>
-                        <p className="text-sm font-medium text-[color:var(--text-muted)]">Versions Comparing</p>
-                        <p className="text-lg font-bold text-[color:var(--text-main)]">v{compareData.version_a} ➔ v{compareData.version_b}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                            <GitCompareArrows size={22} color="var(--gold-400)" />
+                            <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#fff', fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>
+                                Version Comparison
+                            </h1>
+                        </div>
+                        <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.875rem' }}>{doc.title}</p>
                     </div>
-                </div>
-
-                <div className="flex items-center gap-4 rounded-xl border border-[color:var(--border-light)] bg-white p-5 shadow-sm">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-full ${isIdentical ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'}`}>
-                        {isIdentical ? <CheckCircle size={24} /> : <AlertTriangle size={24} />}
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium text-[color:var(--text-muted)]">Similarity Score</p>
-                        <p className="text-lg font-bold text-[color:var(--text-main)]">{simRatio}% Match</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 rounded-xl border border-[color:var(--border-light)] bg-white p-5 shadow-sm">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-purple-600">
-                        <FileWarning size={24} />
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium text-[color:var(--text-muted)]">Lines Edited</p>
-                        <p className="text-lg font-bold text-[color:var(--text-main)]">
-                            <span className="text-[color:var(--diff-add-text)] w-8 inline-block">+{compareData.added.length}</span>
-                            <span className="text-[color:var(--diff-del-text)] w-8 inline-block">-{compareData.removed.length}</span>
-                        </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-glass)', border: '1px solid var(--border-navy)', borderRadius: '10px', padding: '10px 16px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '2px' }}>Comparing</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--gold-400)', fontFamily: 'var(--font-mono)' }}>v{v1} → v{v2}</div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Diff Viewer Shell */}
-            <div className="rounded-xl border border-[color:var(--border-light)] bg-white shadow-sm overflow-hidden animate-slide-up">
-                <div className="border-b border-[color:var(--border-light)] bg-[color:var(--bg-subtle)] px-4 py-3 font-semibold text-[color:var(--text-main)]">
-                    Diff Viewer
+            {/* ── Metric Cards ─────────────────────────────────────────── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                {/* Similarity */}
+                <MetricCard
+                    title="Similarity Score"
+                    value={`${simPct}%`}
+                    icon={isIdentical ? <CheckCircle size={22} /> : <AlertTriangle size={22} />}
+                    iconBg={isIdentical ? '#d1fae5' : data.similarity >= 0.8 ? '#fef9c3' : '#fee2e2'}
+                    iconColor={isIdentical ? '#059669' : data.similarity >= 0.8 ? '#d97706' : '#dc2626'}
+                    sub={<Badge variant={changeBadgeVariant}>{changeLevel} change</Badge>}
+                />
+                {/* Added */}
+                <MetricCard
+                    title="Lines Added"
+                    value={`+${data.added.length}`}
+                    icon={<span style={{ fontSize: '1.1rem' }}>+</span>}
+                    iconBg="rgb(220,252,231)"
+                    iconColor="var(--diff-add-text)"
+                    sub="insertions"
+                />
+                {/* Removed */}
+                <MetricCard
+                    title="Lines Removed"
+                    value={`−${data.removed.length}`}
+                    icon={<TrendingDown size={22} />}
+                    iconBg="#fee2e2"
+                    iconColor="var(--diff-del-text)"
+                    sub="deletions"
+                />
+            </div>
+
+            {/* ── Diff Viewer ──────────────────────────────────────────── */}
+            <div style={{ background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+                {/* Toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border-light)', background: '#fafbff' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }} />
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }} />
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }} />
+                        <span style={{ marginLeft: '10px', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--navy-700)', fontFamily: 'var(--font-mono)' }}>
+                            diff — v{v1} → v{v2}
+                        </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', fontSize: '0.75rem' }}>
+                        <span style={{ color: 'var(--diff-add-text)', fontWeight: 600 }}>+{data.added.length} added</span>
+                        <span style={{ color: 'var(--diff-del-text)', fontWeight: 600 }}>−{data.removed.length} removed</span>
+                    </div>
                 </div>
-                <div className="overflow-x-auto">
-                    {compareData.diff.length === 0 ? (
-                        <div className="p-12 text-center text-[color:var(--text-muted)]">
-                            <CheckCircle size={48} className="mx-auto mb-4 text-green-500 opacity-50" />
-                            <p>These two versions are completely identical.</p>
+
+                {/* Diff Lines */}
+                <div style={{ overflowX: 'auto' }}>
+                    {data.diff.length === 0 ? (
+                        <div style={{ padding: '48px', textAlign: 'center' }}>
+                            <CheckCircle size={44} color="#10b981" style={{ display: 'block', margin: '0 auto 12px', opacity: 0.4 }} />
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>These two versions are completely identical.</p>
                         </div>
                     ) : (
-                        <div className="min-w-fit divide-y divide-[color:var(--border-light)]">
-                            {renderDiffLines()}
+                        <div style={{ minWidth: 'fit-content' }}>
+                            {data.diff.map((line, idx) => {
+                                if (line.startsWith('---') || line.startsWith('+++')) return null;
+                                if (line.startsWith('@@')) return (
+                                    <div key={idx} style={{ background: '#eff6ff', color: '#1d4ed8', padding: '6px 20px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', borderTop: '1px solid #dbeafe', borderBottom: '1px solid #dbeafe' }}>
+                                        {line}
+                                    </div>
+                                );
+                                const isA = line.startsWith('+'), isR = line.startsWith('-');
+                                return (
+                                    <div key={idx} style={{
+                                        display: 'flex', alignItems: 'flex-start',
+                                        padding: '3px 0',
+                                        background: isA ? 'var(--diff-add-bg)' : isR ? 'var(--diff-del-bg)' : 'transparent',
+                                        borderLeft: isA ? '3px solid var(--diff-add-text)' : isR ? '3px solid var(--diff-del-text)' : '3px solid transparent',
+                                        transition: 'background 0.1s',
+                                    }}
+                                        onMouseEnter={e => !isA && !isR && (e.currentTarget.style.background = 'var(--bg-hover)')}
+                                        onMouseLeave={e => !isA && !isR && (e.currentTarget.style.background = 'transparent')}
+                                    >
+                                        <div style={{ width: '40px', padding: '0 12px', textAlign: 'center', flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: isA ? 'var(--diff-add-text)' : isR ? 'var(--diff-del-text)' : 'var(--text-lighter)', userSelect: 'none', fontWeight: 600 }}>
+                                            {isA ? '+' : isR ? '−' : ' '}
+                                        </div>
+                                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', color: isA ? 'var(--diff-add-text)' : isR ? 'var(--diff-del-text)' : 'var(--text-main)', whiteSpace: 'pre-wrap', flex: 1, padding: '0 16px 0 0', lineHeight: 1.7 }}>
+                                            {(isA || isR) ? highlightRisk(line.slice(1)) : line}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* ── Risk Summary ─────────────────────────────────────────── */}
+            {(data.added.length > 0 || data.removed.length > 0) && (() => {
+                const allChangedLines = [...data.added, ...data.removed].join(' ').toLowerCase();
+                const foundRisks = RISK_WORDS.filter(w => allChangedLines.includes(w));
+                if (foundRisks.length === 0) return null;
+                return (
+                    <div style={{ padding: '16px 20px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-lg)', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <AlertTriangle size={18} color="#d97706" style={{ flexShrink: 0, marginTop: '1px' }} />
+                        <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#92400e', marginBottom: '4px' }}>⚖️ Legal Risk Keywords Detected</div>
+                            <div style={{ fontSize: '0.8125rem', color: '#78350f' }}>
+                                The following high-risk terms appear in the changed sections: {' '}
+                                {foundRisks.map((w, i) => <span key={i}><Badge variant="warning" style={{ marginRight: '4px' }}>{w}</Badge></span>)}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };
+
+function MetricCard({ title, value, icon, iconBg, iconColor, sub }: { title: string; value: string; icon: React.ReactNode; iconBg: string; iconColor: string; sub: React.ReactNode }) {
+    return (
+        <div style={{ background: '#fff', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-xl)', padding: '20px 22px', boxShadow: 'var(--shadow-sm)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: iconBg, color: iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800, fontSize: '1.25rem' }}>
+                {icon}
+            </div>
+            <div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{title}</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--navy-900)', lineHeight: 1, marginBottom: '6px' }}>{value}</div>
+                <div>{sub}</div>
+            </div>
+        </div>
+    );
+}

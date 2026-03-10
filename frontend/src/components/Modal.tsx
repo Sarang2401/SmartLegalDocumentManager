@@ -5,43 +5,95 @@ interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
     title: string;
+    subtitle?: string;
     children: React.ReactNode;
+    width?: string;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, subtitle, children, width = '560px' }) => {
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
         } else {
-            document.body.style.overflow = 'auto';
+            document.body.style.overflow = '';
         }
-        return () => {
-            document.body.style.overflow = 'auto';
-        };
+        return () => { document.body.style.overflow = ''; };
     }, [isOpen]);
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+            style={{
+                position: 'fixed', inset: 0, zIndex: 50,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '1rem',
+            }}
+        >
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm animate-fade-in"
                 onClick={onClose}
+                style={{
+                    position: 'fixed', inset: 0,
+                    background: 'rgba(6,16,31,0.72)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
+                }}
+                className="animate-fade-in"
             />
 
-            {/* Modal Dialog */}
-            <div className="relative z-50 w-full max-w-lg rounded-[color:var(--radius-xl)] bg-[color:var(--bg-elevated)] p-6 shadow-[color:var(--shadow-float)] animate-slide-up border border-[color:var(--border-light)]">
-                <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-xl font-semibold text-[color:var(--text-main)]">{title}</h2>
+            {/* Dialog */}
+            <div
+                style={{
+                    position: 'relative', zIndex: 51,
+                    width: '100%', maxWidth: width,
+                    background: '#ffffff',
+                    borderRadius: 'var(--radius-xl)',
+                    boxShadow: 'var(--shadow-xl)',
+                    overflow: 'hidden',
+                }}
+                className="animate-slide-up"
+            >
+                {/* Header stripe */}
+                <div style={{ height: '3px', background: 'linear-gradient(90deg, var(--navy-800), var(--navy-500), var(--gold-500))' }} />
+
+                {/* Header content */}
+                <div style={{
+                    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                    padding: '1.5rem 1.5rem 1rem',
+                    borderBottom: '1px solid var(--border-light)',
+                }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--navy-800)', letterSpacing: '-0.02em' }}>
+                            {title}
+                        </h2>
+                        {subtitle && (
+                            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '3px' }}>{subtitle}</p>
+                        )}
+                    </div>
                     <button
                         onClick={onClose}
-                        className="rounded-full p-1 text-[color:var(--text-muted)] hover:bg-[color:var(--bg-hover)] transition-colors"
+                        style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: '28px', height: '28px',
+                            borderRadius: '50%',
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            transition: 'background 0.15s',
+                            flexShrink: 0,
+                            marginLeft: '12px',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                        <X size={20} />
+                        <X size={18} />
                     </button>
                 </div>
-                <div>
+
+                {/* Body */}
+                <div style={{ padding: '1.5rem' }}>
                     {children}
                 </div>
             </div>

@@ -1,24 +1,38 @@
 import React from 'react';
-import { cn } from '../utils/classnames';
 
-interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-    variant?: 'success' | 'warning' | 'danger' | 'neutral';
+interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+    variant?: 'success' | 'warning' | 'danger' | 'neutral' | 'gold' | 'navy';
 }
 
-export const Badge: React.FC<BadgeProps> = ({ className, variant = 'neutral', ...props }) => {
+const variantMap: Record<string, React.CSSProperties> = {
+    success: { background: 'var(--success-bg)', color: 'var(--success-text)', border: '1px solid var(--success-border)' },
+    warning: { background: 'var(--warning-bg)', color: 'var(--warning-text)', border: '1px solid var(--warning-border)' },
+    danger: { background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)' },
+    neutral: { background: '#f0f2f7', color: 'var(--text-muted)', border: '1px solid var(--border-light)' },
+    gold: { background: 'var(--gold-muted)', color: 'var(--gold-600)', border: '1px solid var(--gold-border)' },
+    navy: { background: 'rgba(21,42,84,0.08)', color: 'var(--navy-700)', border: '1px solid rgba(21,42,84,0.15)' },
+};
+
+export const Badge: React.FC<BadgeProps> = ({ variant = 'neutral', style, children, ...props }) => {
     return (
-        <div
-            className={cn(
-                'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold max-w-max',
-                {
-                    'bg-[color:var(--success-bg)] text-[color:var(--success-text)] border border-[color:var(--success-border)]': variant === 'success',
-                    'bg-[color:var(--warning-bg)] text-[color:var(--warning-text)] border border-[color:var(--warning-border)]': variant === 'warning',
-                    'bg-[color:var(--danger-bg)] text-[color:var(--danger-text)] border border-[color:var(--danger-border)]': variant === 'danger',
-                    'bg-[color:var(--bg-hover)] text-[color:var(--text-muted)] border border-[color:var(--border-light)]': variant === 'neutral',
-                },
-                className
-            )}
+        <span
+            style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '20px',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+                ...variantMap[variant],
+                ...style,
+            }}
             {...props}
-        />
+        >
+            {children}
+        </span>
     );
 };
