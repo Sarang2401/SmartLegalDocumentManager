@@ -6,6 +6,7 @@ import { ArrowLeft, Upload, Edit2, FileText, Clock, FileWarning, RotateCcw, Eye,
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import mammoth from 'mammoth/mammoth.browser';
 
 const RISK_WORDS = ['payment', 'liability', 'termination', 'confidentiality', 'indemnity', 'penalty'];
 
@@ -218,7 +219,36 @@ export const DocumentDetail = () => {
                     {!previewDiff ? (
                         <>
                             <div><label style={{ display: 'block', marginBottom: '6px' }}>Modified By</label><input required placeholder="Name or department" value={user} onChange={e => setUser(e.target.value)} /></div>
-                            <div><label style={{ display: 'block', marginBottom: '6px' }}>Document Content</label><textarea required rows={10} value={content} onChange={e => setContent(e.target.value)} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }} /></div>
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <label style={{ margin: 0 }}>Document Content</label>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--navy-500)', cursor: 'pointer', fontWeight: 600 }}>
+                                        <input type="file" accept=".txt,.docx" style={{ display: 'none' }} onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+
+                                            if (file.name.endsWith('.docx')) {
+                                                const r = new FileReader();
+                                                r.onload = async (ev) => {
+                                                    try {
+                                                        const res = await mammoth.extractRawText({ arrayBuffer: ev.target?.result as ArrayBuffer });
+                                                        setContent(res.value);
+                                                    } catch (err) {
+                                                        alert("Error extracting text from DOCX");
+                                                    }
+                                                };
+                                                r.readAsArrayBuffer(file);
+                                            } else {
+                                                const r = new FileReader();
+                                                r.onload = ev => setContent(ev.target?.result as string);
+                                                r.readAsText(file);
+                                            }
+                                        }} />
+                                        📎 Upload .txt or .docx file
+                                    </label>
+                                </div>
+                                <textarea required rows={10} placeholder="Paste document content or upload a .txt / .docx file..." value={content} onChange={e => setContent(e.target.value)} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }} />
+                            </div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                                 <Button type="button" variant="ghost" onClick={() => setIsUploadOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="secondary" onClick={handlePreview} disabled={isPreviewLoading || !content.trim()}>{isPreviewLoading ? 'Loading…' : <><Eye size={14} /> Preview Diff</>}</Button>

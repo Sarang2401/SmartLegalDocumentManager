@@ -6,6 +6,7 @@ import type { DocumentResponse } from '../types';
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import mammoth from 'mammoth/mammoth.browser';
 
 export const Dashboard = () => {
     const [documents, setDocuments] = useState<DocumentResponse[]>([]);
@@ -198,11 +199,37 @@ export const Dashboard = () => {
                         />
                     </div>
                     <div>
-                        <label style={{ display: 'block', marginBottom: '6px' }}>Initial Content</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <label style={{ margin: 0 }}>Initial Content</label>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--navy-500)', cursor: 'pointer', fontWeight: 600 }}>
+                                <input type="file" accept=".txt,.docx" style={{ display: 'none' }} onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+
+                                    if (file.name.endsWith('.docx')) {
+                                        const r = new FileReader();
+                                        r.onload = async (ev) => {
+                                            try {
+                                                const res = await mammoth.extractRawText({ arrayBuffer: ev.target?.result as ArrayBuffer });
+                                                setNewContent(res.value);
+                                            } catch (err) {
+                                                alert("Error extracting text from DOCX");
+                                            }
+                                        };
+                                        r.readAsArrayBuffer(file);
+                                    } else {
+                                        const r = new FileReader();
+                                        r.onload = ev => setNewContent(ev.target?.result as string);
+                                        r.readAsText(file);
+                                    }
+                                }} />
+                                📎 Upload .txt or .docx file
+                            </label>
+                        </div>
                         <textarea
                             required
                             rows={7}
-                            placeholder="Paste the document text here..."
+                            placeholder="Paste the document text here or upload a .txt file..."
                             value={newContent}
                             onChange={e => setNewContent(e.target.value)}
                             style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}
