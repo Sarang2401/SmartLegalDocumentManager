@@ -68,6 +68,11 @@ def create_document(
     return doc, version
 
 
+def list_documents(db: Session) -> list[Document]:
+    """Retrieve a list of all active documents."""
+    return repo.get_all_documents(db)
+
+
 def upload_version(
     db: Session,
     document_id: UUID,
@@ -176,6 +181,85 @@ def compare_versions(
     }
 
 
+def restore_version(
+    db: Session, document_id: UUID, version_number: int, restored_by: str, background_tasks: BackgroundTasks
+) -> DocumentVersion:
+    """Restore a previous version of a document by creating a new version with its content."""
+    doc = repo.get_document(db, document_id)
+    if doc is None:
+        raise ValueError("Document not found.")
+
+    ver_to_restore = repo.get_version_by_number(db, document_id, version_number)
+    if ver_to_restore is None:
+        raise ValueError(f"Version {version_number} not found.")
+
+    latest = repo.get_latest_version(db, document_id)
+    if latest and _normalise(latest.content) == _normalise(ver_to_restore.content):
+        raise ValueError("Cannot restore: current latest version already matches the selected version.")
+
+    next_number = (latest.version_number + 1) if latest else 1
+    new_version = repo.create_version(
+        db,
+        document_id=document_id,
+        version_number=next_number,
+        content=ver_to_restore.content,
+        created_by=restored_by,
+    )
+
+    repo.create_audit_log(
+        db,
+        document_id=document_id,
+        action="RESTORE_VERSION",
+        user=restored_by,
+        version_id=new_version.id,
+    )
+
+    db.commit()
+    db.refresh(new_version)
+
+    # Trigger notification as this is essentially a significant upload
+    if latest:
+        ratio = _similarity(latest.content, new_version.content)
+        if ratio < 0.98:
+            background_tasks.add_task(_notify, document_id, new_version.version_number, ratio)
+
+    return new_version
+
+
+def preview_diff(db: Session, document_id: UUID, content: str) -> dict:
+    """Preview the diff of new content against the latest version without saving."""
+    import difflib
+
+    doc = repo.get_document(db, document_id)
+    if doc is None:
+        raise ValueError("Document not found.")
+
+    latest = repo.get_latest_version(db, document_id)
+    if not latest:
+        raise ValueError("No versions found to compare against.")
+
+    lines_a = latest.content.splitlines(keepends=True)
+    lines_b = content.splitlines(keepends=True)
+
+    diff_lines = list(
+        difflib.unified_diff(lines_a, lines_b, fromfile=f"v{latest.version_number}", tofile="Preview")
+    )
+
+    added = [l.rstrip("\n") for l in diff_lines if l.startswith("+") and not l.startswith("+++")]
+    removed = [l.rstrip("\n") for l in diff_lines if l.startswith("-") and not l.startswith("---")]
+    ratio = difflib.SequenceMatcher(None, latest.content, content).ratio()
+
+    return {
+        "document_id": str(document_id),
+        "version_a": latest.version_number,
+        "version_b": -1,  # Indicate preview
+        "similarity": round(ratio, 4),
+        "diff": [l.rstrip("\n") for l in diff_lines],
+        "added": added,
+        "removed": removed,
+    }
+
+
 def update_title(
     db: Session, document_id: UUID, new_title: str, modified_by: str
 ) -> Document:
@@ -243,7 +327,7 @@ def delete_version(
 
 def fetch_timeline(db: Session, document_id: UUID) -> list:
     """Fetch chronological activity timeline for a document."""
-    doc = repo.get_document(db, document_id)
+    doc = repo.get_document(db, document_id, include_deleted=True)
     if doc is None:
         raise ValueError("Document not found.")
     

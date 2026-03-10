@@ -38,6 +38,12 @@ class VersionCreate(BaseModel):
     content: str = Field(..., min_length=1)
     modified_by: str = Field(..., min_length=1, max_length=255)
 
+class RestoreRequest(BaseModel):
+    restored_by: str = Field(..., min_length=1, max_length=255)
+
+class PreviewRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+
 
 class VersionResponse(BaseModel):
     id: UUID

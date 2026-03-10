@@ -16,6 +16,14 @@ from app.services import document_service as svc
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
+# ── GET /documents ────────────────────────────────────────────────────────────
+
+@router.get("", response_model=list[DocumentResponse])
+def list_documents(db: Session = Depends(get_db)):
+    """List all active documents."""
+    return svc.list_documents(db)
+
+
 # ── POST /documents ───────────────────────────────────────────────────────────
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -90,6 +98,58 @@ def compare_versions(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return result
+
+
+# ── POST /documents/{id}/restore/{version} ───────────────────────────────────
+
+from app.schemas.document import RestoreRequest
+
+@router.post("/{document_id}/restore/{version_number}", response_model=VersionResponse)
+def restore_version(
+    document_id: UUID,
+    version_number: int,
+    payload: RestoreRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Restore a previous version by creating a new version with its content."""
+    try:
+        version = svc.restore_version(
+            db,
+            document_id=document_id,
+            version_number=version_number,
+            restored_by=payload.restored_by,
+            background_tasks=background_tasks,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "already matches" in msg:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+    return version
+
+
+# ── POST /documents/{id}/preview ─────────────────────────────────────────────
+
+from app.schemas.document import PreviewRequest
+
+@router.post("/{document_id}/preview", response_model=CompareResponse)
+def preview_diff(
+    document_id: UUID,
+    payload: PreviewRequest,
+    db: Session = Depends(get_db),
+):
+    """Preview the diff of new content against the latest version without saving."""
+    try:
+        result = svc.preview_diff(
+            db,
+            document_id=document_id,
+            content=payload.content,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return result
+
 
 
 # ── PATCH /documents/{id}/title ───────────────────────────────────────────────

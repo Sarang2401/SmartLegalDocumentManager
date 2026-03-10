@@ -23,11 +23,19 @@ def create_document(db: Session, title: str, created_by: str) -> Document:
     return doc
 
 
-def get_document(db: Session, document_id: UUID) -> Optional[Document]:
+def get_document(db: Session, document_id: UUID, include_deleted: bool = False) -> Optional[Document]:
+    query = db.query(Document).filter(Document.id == document_id)
+    if not include_deleted:
+        query = query.filter(Document.is_deleted == False)  # noqa: E712
+    return query.first()
+
+
+def get_all_documents(db: Session) -> list[Document]:
     return (
         db.query(Document)
-        .filter(Document.id == document_id, Document.is_deleted == False)  # noqa: E712
-        .first()
+        .filter(Document.is_deleted == False)  # noqa: E712
+        .order_by(Document.updated_at.desc())
+        .all()
     )
 
 
