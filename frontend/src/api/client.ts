@@ -10,7 +10,7 @@ import type {
     PreviewRequestPayload,
 } from '../types';
 
-const API_BASE = 'http://localhost:8000/documents';
+const API_BASE = 'https://legal-doc-api-u6pb.onrender.com/documents';
 
 export class ApiError extends Error {
     public status?: number;
