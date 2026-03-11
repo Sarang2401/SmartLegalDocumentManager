@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { VersionResponse, AuditLogResponse, DocumentResponse, CompareResponse } from '../types';
-import { ArrowLeft, Upload, Edit2, FileText, Clock, FileWarning, RotateCcw, Eye, GitCompareArrows, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Upload, Edit2, FileText, Clock, FileWarning, RotateCcw, Eye, GitCompareArrows, AlertTriangle, Download } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
@@ -107,6 +107,19 @@ export const DocumentDetail = () => {
         else if (selectedVersions.length < 2) setSelectedVersions(sv => [...sv, n]);
     };
 
+    const handleDownload = (v: VersionResponse, docTitle: string) => {
+        const blob = new Blob([v.content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safeTitle = docTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        a.download = `${safeTitle}_v${v.version_number}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     if (loading) return <div style={{ padding: '64px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading document…</div>;
     if (!doc) return <div style={{ padding: '64px', textAlign: 'center', color: 'var(--danger-text)' }}>Document not found.</div>;
 
@@ -197,11 +210,16 @@ export const DocumentDetail = () => {
                                                 {v.content}
                                             </div>
                                         </div>
-                                        {!isLatest && (
-                                            <div style={{ flexShrink: 0 }}>
-                                                <Button variant="secondary" size="sm" onClick={() => handleRestore(v.version_number)}><RotateCcw size={13} /> Restore</Button>
-                                            </div>
-                                        )}
+                                        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <Button variant="ghost" size="sm" onClick={() => handleDownload(v, doc.title)} style={{ background: '#fafbff', border: '1px solid var(--border-light)' }}>
+                                                <Download size={13} /> Download
+                                            </Button>
+                                            {!isLatest && (
+                                                <Button variant="secondary" size="sm" onClick={() => handleRestore(v.version_number)}>
+                                                    <RotateCcw size={13} /> Restore
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                 </li>
                             );

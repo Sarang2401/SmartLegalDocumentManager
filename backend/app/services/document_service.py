@@ -14,7 +14,17 @@ from app.models.document_version import DocumentVersion
 from app.repositories import document_repository as repo
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+LEGAL_TOPIC_KEYWORDS = {
+    "Payment": ("payment", "fee", "fees", "invoice", "compensation"),
+    "Liability": ("liability", "damages", "limitation of liability", "cap"),
+    "Termination": ("termination", "terminate", "survival", "notice"),
+    "Confidentiality": ("confidential", "confidentiality", "non-disclosure", "nda"),
+    "Indemnity": ("indemnity", "indemnify", "hold harmless"),
+    "Warranty": ("warranty", "warrant", "disclaimer"),
+    "Data Protection": ("privacy", "personal data", "data protection", "security"),
+    "Governing Law": ("governing law", "jurisdiction", "venue", "arbitration"),
+}
+
 
 def _normalise(text: str) -> str:
     """Strip whitespace so identical-content check ignores spacing."""
@@ -24,18 +34,106 @@ def _normalise(text: str) -> str:
 def _similarity(a: str, b: str) -> float:
     """Return SequenceMatcher ratio between two strings."""
     import difflib
+
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
 def _notify(document_id: UUID, version_number: int, similarity: float) -> None:
-    """Placeholder notification — prints to stdout (no external deps allowed)."""
+    """Placeholder notification that keeps the demo dependency-free."""
     print(
         f"[NOTIFICATION] Document {document_id}: version v{version_number} "
-        f"uploaded. Similarity to previous = {similarity:.2%} — significant change detected."
+        f"uploaded. Similarity to previous = {similarity:.2%} - significant change detected."
     )
 
 
-# ── Service functions ─────────────────────────────────────────────────────────
+def _clean_changed_line(line: str) -> str:
+    """Remove diff prefixes and collapse whitespace for summaries."""
+    if line[:1] in {"+", "-"}:
+        line = line[1:]
+    return " ".join(line.split())
+
+
+def _truncate(text: str, limit: int = 140) -> str:
+    """Trim long snippets so summary bullets stay readable."""
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 3].rstrip()}..."
+
+
+def _detect_legal_topics(lines: list[str]) -> list[str]:
+    """Infer likely clause topics from changed lines."""
+    haystack = " ".join(lines).lower()
+    topics: list[str] = []
+    for topic, keywords in LEGAL_TOPIC_KEYWORDS.items():
+        if any(keyword in haystack for keyword in keywords):
+            topics.append(topic)
+    return topics
+
+
+def _review_guidance(similarity: float, legal_topics: list[str], change_count: int) -> str:
+    """Return a lawyer-focused review suggestion."""
+    if legal_topics:
+        topics = ", ".join(legal_topics[:3]).lower()
+        return f"Review the updated {topics} language before sharing this draft externally."
+    if similarity < 0.85 or change_count >= 6:
+        return "Review the full redline carefully; multiple clauses appear to have changed materially."
+    if change_count == 0:
+        return "No additional legal review appears necessary because no textual changes were detected."
+    return "A focused review should be enough because the edits appear limited in scope."
+
+
+def _build_change_summary(
+    version_a: int,
+    version_b: int,
+    similarity: float,
+    added: list[str],
+    removed: list[str],
+) -> dict:
+    """Generate a minimal AI-style summary without external dependencies."""
+    cleaned_added = [_clean_changed_line(line) for line in added]
+    cleaned_removed = [_clean_changed_line(line) for line in removed]
+    cleaned_added = [line for line in cleaned_added if line]
+    cleaned_removed = [line for line in cleaned_removed if line]
+    changed_lines = cleaned_added + cleaned_removed
+    legal_topics = _detect_legal_topics(changed_lines)
+    target_label = f"v{version_b}" if version_b > 0 else "the proposed draft"
+
+    if not changed_lines and similarity == 1:
+        overview = f"{target_label} matches v{version_a}; no textual changes were detected."
+        notable_changes = ["No additions or removals were identified in the comparison."]
+    else:
+        if similarity >= 0.98:
+            change_level = "minor targeted edits"
+        elif similarity >= 0.85:
+            change_level = "moderate edits"
+        else:
+            change_level = "material edits"
+
+        overview = (
+            f"Compared with v{version_a}, {target_label} contains {change_level}: "
+            f"{len(added)} added and {len(removed)} removed lines. "
+            f"Overall similarity is {similarity * 100:.1f}%."
+        )
+
+        notable_changes: list[str] = []
+        if cleaned_added:
+            notable_changes.append(f"Added: {_truncate(cleaned_added[0])}")
+        if cleaned_removed:
+            notable_changes.append(f"Removed: {_truncate(cleaned_removed[0])}")
+        if legal_topics:
+            notable_changes.append(f"Potentially affected legal areas: {', '.join(legal_topics[:4])}.")
+        if len(changed_lines) > 2:
+            notable_changes.append(
+                f"Additional changed text appears in {len(changed_lines) - 2} other line(s) of the redline."
+            )
+
+    return {
+        "overview": overview,
+        "notable_changes": notable_changes,
+        "legal_topics": legal_topics,
+        "review_guidance": _review_guidance(similarity, legal_topics, len(changed_lines)),
+    }
+
 
 def create_document(
     db: Session,
@@ -115,7 +213,6 @@ def upload_version(
     db.commit()
     db.refresh(version)
 
-    # Background notification if change is significant
     if latest:
         ratio = _similarity(latest.content, content)
         if ratio < 0.98:
@@ -132,16 +229,8 @@ def list_versions(db: Session, document_id: UUID) -> list[DocumentVersion]:
     return repo.get_versions(db, document_id)
 
 
-def compare_versions(
-    db: Session, document_id: UUID, v1: int, v2: int
-) -> dict:
-    """Compare two versions of a document using difflib.
-
-    Returns a dict with similarity ratio, unified diff lines, and
-    categorised added / removed / modified lines.
-
-    Raises ValueError when document or either version is not found.
-    """
+def compare_versions(db: Session, document_id: UUID, v1: int, v2: int) -> dict:
+    """Compare two versions of a document using difflib."""
     import difflib
 
     doc = repo.get_document(db, document_id)
@@ -158,33 +247,35 @@ def compare_versions(
     lines_a = ver_a.content.splitlines(keepends=True)
     lines_b = ver_b.content.splitlines(keepends=True)
 
-    # Unified diff output
     diff_lines = list(
         difflib.unified_diff(lines_a, lines_b, fromfile=f"v{v1}", tofile=f"v{v2}")
     )
 
-    # Categorise changes
-    added = [l.rstrip("\n") for l in diff_lines if l.startswith("+") and not l.startswith("+++")]
-    removed = [l.rstrip("\n") for l in diff_lines if l.startswith("-") and not l.startswith("---")]
-
-    # Similarity ratio
+    added = [line.rstrip("\n") for line in diff_lines if line.startswith("+") and not line.startswith("+++")]
+    removed = [line.rstrip("\n") for line in diff_lines if line.startswith("-") and not line.startswith("---")]
     ratio = difflib.SequenceMatcher(None, ver_a.content, ver_b.content).ratio()
+    summary = _build_change_summary(v1, v2, ratio, added, removed)
 
     return {
         "document_id": str(document_id),
         "version_a": v1,
         "version_b": v2,
         "similarity": round(ratio, 4),
-        "diff": [l.rstrip("\n") for l in diff_lines],
+        "diff": [line.rstrip("\n") for line in diff_lines],
         "added": added,
         "removed": removed,
+        "summary": summary,
     }
 
 
 def restore_version(
-    db: Session, document_id: UUID, version_number: int, restored_by: str, background_tasks: BackgroundTasks
+    db: Session,
+    document_id: UUID,
+    version_number: int,
+    restored_by: str,
+    background_tasks: BackgroundTasks,
 ) -> DocumentVersion:
-    """Restore a previous version of a document by creating a new version with its content."""
+    """Restore a previous version by creating a new version with its content."""
     doc = repo.get_document(db, document_id)
     if doc is None:
         raise ValueError("Document not found.")
@@ -217,7 +308,6 @@ def restore_version(
     db.commit()
     db.refresh(new_version)
 
-    # Trigger notification as this is essentially a significant upload
     if latest:
         ratio = _similarity(latest.content, new_version.content)
         if ratio < 0.98:
@@ -245,24 +335,24 @@ def preview_diff(db: Session, document_id: UUID, content: str) -> dict:
         difflib.unified_diff(lines_a, lines_b, fromfile=f"v{latest.version_number}", tofile="Preview")
     )
 
-    added = [l.rstrip("\n") for l in diff_lines if l.startswith("+") and not l.startswith("+++")]
-    removed = [l.rstrip("\n") for l in diff_lines if l.startswith("-") and not l.startswith("---")]
+    added = [line.rstrip("\n") for line in diff_lines if line.startswith("+") and not line.startswith("+++")]
+    removed = [line.rstrip("\n") for line in diff_lines if line.startswith("-") and not line.startswith("---")]
     ratio = difflib.SequenceMatcher(None, latest.content, content).ratio()
+    summary = _build_change_summary(latest.version_number, -1, ratio, added, removed)
 
     return {
         "document_id": str(document_id),
         "version_a": latest.version_number,
-        "version_b": -1,  # Indicate preview
+        "version_b": -1,
         "similarity": round(ratio, 4),
-        "diff": [l.rstrip("\n") for l in diff_lines],
+        "diff": [line.rstrip("\n") for line in diff_lines],
         "added": added,
         "removed": removed,
+        "summary": summary,
     }
 
 
-def update_title(
-    db: Session, document_id: UUID, new_title: str, modified_by: str
-) -> Document:
+def update_title(db: Session, document_id: UUID, new_title: str, modified_by: str) -> Document:
     """Update a document's title without creating a new version."""
     doc = repo.get_document(db, document_id)
     if doc is None:
@@ -281,7 +371,7 @@ def update_title(
 
 
 def delete_document(db: Session, document_id: UUID, modified_by: str) -> None:
-    """Soft delete a document. (History stays intact)."""
+    """Soft delete a document. History stays intact."""
     doc = repo.get_document(db, document_id)
     if doc is None:
         raise ValueError("Document not found.")
@@ -296,9 +386,7 @@ def delete_document(db: Session, document_id: UUID, modified_by: str) -> None:
     db.commit()
 
 
-def delete_version(
-    db: Session, document_id: UUID, version_number: int, modified_by: str
-) -> None:
+def delete_version(db: Session, document_id: UUID, version_number: int, modified_by: str) -> None:
     """Hard delete a specific version. Cannot delete the final remaining version."""
     doc = repo.get_document(db, document_id)
     if doc is None:
@@ -312,7 +400,6 @@ def delete_version(
     if ver is None:
         raise ValueError(f"Version {version_number} not found.")
 
-    # Record audit log before hard deleting the version
     repo.create_audit_log(
         db,
         document_id=document_id,
@@ -330,5 +417,5 @@ def fetch_timeline(db: Session, document_id: UUID) -> list:
     doc = repo.get_document(db, document_id, include_deleted=True)
     if doc is None:
         raise ValueError("Document not found.")
-    
+
     return repo.get_audit_logs(db, document_id)

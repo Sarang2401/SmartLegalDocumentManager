@@ -24,6 +24,12 @@ export interface CompareResponse {
     diff: string[];
     added: string[];
     removed: string[];
+    summary?: {
+        overview: string;
+        notable_changes: string[];
+        legal_topics: string[];
+        review_guidance: string;
+    };
 }
 
 export interface AuditLogResponse {

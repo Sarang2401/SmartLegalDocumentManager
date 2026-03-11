@@ -52,7 +52,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     {/* Nav */}
                     <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <NavLink to="/" icon={<FileText size={15} />} label="Documents" active={location.pathname === '/'} />
-                        <NavLink to="/" icon={<BookOpen size={15} />} label="Audit Logs" active={false} />
+                        <NavText icon={<BookOpen size={15} />} label="Audit Logs" />
                     </nav>
 
                     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -125,5 +125,27 @@ function NavLink({ to, icon, label, active }: { to: string; icon: React.ReactNod
             {icon}
             {label}
         </Link>
+    );
+}
+
+function NavText({ icon, label }: { icon: React.ReactNode; label: string }) {
+    return (
+        <span
+            title="Audit logs are available inside each document's Timeline view"
+            style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                fontSize: '0.8125rem',
+                fontWeight: 400,
+                color: 'var(--text-lighter)',
+                border: '1px solid transparent',
+                cursor: 'default',
+                userSelect: 'none',
+            }}
+        >
+            {icon}
+            {label}
+        </span>
     );
 }

@@ -7,8 +7,6 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-# ── Document ────────────────────────────────────────────────────────────────
-
 class DocumentCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=512)
     content: str = Field(..., min_length=1)
@@ -32,14 +30,14 @@ class DocumentResponse(BaseModel):
         from_attributes = True
 
 
-# ── DocumentVersion ──────────────────────────────────────────────────────────
-
 class VersionCreate(BaseModel):
     content: str = Field(..., min_length=1)
     modified_by: str = Field(..., min_length=1, max_length=255)
 
+
 class RestoreRequest(BaseModel):
     restored_by: str = Field(..., min_length=1, max_length=255)
+
 
 class PreviewRequest(BaseModel):
     content: str = Field(..., min_length=1)
@@ -57,7 +55,12 @@ class VersionResponse(BaseModel):
         from_attributes = True
 
 
-# ── Compare ──────────────────────────────────────────────────────────────────
+class ChangeSummary(BaseModel):
+    overview: str
+    notable_changes: list[str]
+    legal_topics: list[str]
+    review_guidance: str
+
 
 class CompareResponse(BaseModel):
     document_id: str
@@ -67,9 +70,8 @@ class CompareResponse(BaseModel):
     diff: list[str]
     added: list[str]
     removed: list[str]
+    summary: ChangeSummary
 
-
-# ── AuditLog ─────────────────────────────────────────────────────────────────
 
 class AuditLogResponse(BaseModel):
     id: UUID

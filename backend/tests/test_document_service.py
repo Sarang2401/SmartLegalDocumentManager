@@ -1,36 +1,31 @@
 """
-Unit tests for document_service business logic (PRD §11).
-
-Tests covered:
-  - Version creation: creating a document auto-creates v1
-  - Diff logic: compare returns correct added / removed / similarity
-  - Identical content detection: whitespace-normalised rejection
-  - Metadata updates: title change does NOT create a new version
-  - Document deletion: soft-delete sets is_deleted = True
-  - Version deletion: prevents deletion of last remaining version
+Unit tests for document_service business logic.
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-def _create_doc(client: TestClient, title: str = "NDA Agreement", content: str = "This is version 1.", user: str = "alice") -> dict:
+def _create_doc(
+    client: TestClient,
+    title: str = "NDA Agreement",
+    content: str = "This is version 1.",
+    user: str = "alice",
+) -> dict:
     res = client.post("/documents", json={"title": title, "content": content, "created_by": user})
     assert res.status_code == 201, res.text
     return res.json()
 
 
-# ── 1. Version creation ────────────────────────────────────────────────────────
-
 class TestVersionCreation:
     def test_create_document_returns_201(self, client):
-        res = client.post("/documents", json={
-            "title": "Service Agreement",
-            "content": "Party A agrees to provide services.",
-            "created_by": "alice",
-        })
+        res = client.post(
+            "/documents",
+            json={
+                "title": "Service Agreement",
+                "content": "Party A agrees to provide services.",
+                "created_by": "alice",
+            },
+        )
         assert res.status_code == 201
         data = res.json()
         assert data["title"] == "Service Agreement"
@@ -51,10 +46,13 @@ class TestVersionCreation:
         doc = _create_doc(client, content="Original clause.")
         doc_id = doc["id"]
 
-        res = client.post(f"/documents/{doc_id}/versions", json={
-            "content": "Modified clause with new terms.",
-            "modified_by": "carol",
-        })
+        res = client.post(
+            f"/documents/{doc_id}/versions",
+            json={
+                "content": "Modified clause with new terms.",
+                "modified_by": "carol",
+            },
+        )
         assert res.status_code == 201
         assert res.json()["version_number"] == 2
 
@@ -65,45 +63,53 @@ class TestVersionCreation:
         assert "CREATE_DOCUMENT" in actions
 
 
-# ── 2. Identical content detection ────────────────────────────────────────────
-
 class TestIdenticalContentDetection:
     def test_identical_content_returns_409(self, client):
         doc = _create_doc(client, content="Clause A: All rights reserved.")
-        res = client.post(f"/documents/{doc['id']}/versions", json={
-            "content": "Clause A: All rights reserved.",
-            "modified_by": "alice",
-        })
+        res = client.post(
+            f"/documents/{doc['id']}/versions",
+            json={
+                "content": "Clause A: All rights reserved.",
+                "modified_by": "alice",
+            },
+        )
         assert res.status_code == 409
         assert "No meaningful change" in res.json()["detail"]
 
     def test_whitespace_difference_treated_as_identical(self, client):
         doc = _create_doc(client, content="Clause A: All rights reserved.")
-        res = client.post(f"/documents/{doc['id']}/versions", json={
-            "content": "  Clause  A:   All  rights  reserved.  ",
-            "modified_by": "alice",
-        })
+        res = client.post(
+            f"/documents/{doc['id']}/versions",
+            json={
+                "content": "  Clause  A:   All  rights  reserved.  ",
+                "modified_by": "alice",
+            },
+        )
         assert res.status_code == 409
 
     def test_meaningful_change_is_accepted(self, client):
         doc = _create_doc(client, content="Clause A: All rights reserved.")
-        res = client.post(f"/documents/{doc['id']}/versions", json={
-            "content": "Clause A: All rights reserved. Clause B: Termination with 30 days notice.",
-            "modified_by": "alice",
-        })
+        res = client.post(
+            f"/documents/{doc['id']}/versions",
+            json={
+                "content": "Clause A: All rights reserved. Clause B: Termination with 30 days notice.",
+                "modified_by": "alice",
+            },
+        )
         assert res.status_code == 201
 
-
-# ── 3. Diff / compare logic ───────────────────────────────────────────────────
 
 class TestDiffLogic:
     def test_compare_returns_similarity_and_diff(self, client):
         doc = _create_doc(client, content="Line one.\nLine two.\nLine three.")
         doc_id = doc["id"]
-        client.post(f"/documents/{doc_id}/versions", json={
-            "content": "Line one.\nLine two modified.\nLine three.",
-            "modified_by": "bob",
-        })
+        client.post(
+            f"/documents/{doc_id}/versions",
+            json={
+                "content": "Line one.\nLine two modified.\nLine three.",
+                "modified_by": "bob",
+            },
+        )
 
         res = client.get(f"/documents/{doc_id}/compare?v1=1&v2=2")
         assert res.status_code == 200
@@ -112,38 +118,65 @@ class TestDiffLogic:
         assert isinstance(data["diff"], list)
         assert len(data["added"]) > 0
         assert len(data["removed"]) > 0
+        assert "summary" in data
+        assert data["summary"]["overview"]
+        assert isinstance(data["summary"]["notable_changes"], list)
+        assert isinstance(data["summary"]["legal_topics"], list)
+        assert data["summary"]["review_guidance"]
 
     def test_compare_identical_versions_has_similarity_1(self, client):
         doc = _create_doc(client, content="Identical content.")
         doc_id = doc["id"]
-        # Force a different version with slightly different content, then check v1 vs v1
         res = client.get(f"/documents/{doc_id}/compare?v1=1&v2=1")
         assert res.status_code == 200
         assert res.json()["similarity"] == 1.0
         assert res.json()["diff"] == []
+        assert "no textual changes" in res.json()["summary"]["overview"].lower()
 
     def test_compare_invalid_version_returns_404(self, client):
         doc = _create_doc(client)
         res = client.get(f"/documents/{doc['id']}/compare?v1=1&v2=999")
         assert res.status_code == 404
 
+    def test_compare_summary_flags_legal_topics(self, client):
+        doc = _create_doc(client, content="Supplier shall deliver services.")
+        doc_id = doc["id"]
+        client.post(
+            f"/documents/{doc_id}/versions",
+            json={
+                "content": (
+                    "Supplier shall deliver services.\n"
+                    "Client may terminate on 30 days notice.\n"
+                    "Payment is due within 15 days of invoice."
+                ),
+                "modified_by": "bob",
+            },
+        )
 
-# ── 4. Metadata update ────────────────────────────────────────────────────────
+        res = client.get(f"/documents/{doc_id}/compare?v1=1&v2=2")
+        assert res.status_code == 200
+        summary = res.json()["summary"]
+        assert "Payment" in summary["legal_topics"]
+        assert "Termination" in summary["legal_topics"]
+
 
 class TestMetadataUpdate:
     def test_update_title_does_not_create_new_version(self, client):
         doc = _create_doc(client, title="Old Title")
         doc_id = doc["id"]
 
-        res = client.patch(f"/documents/{doc_id}/title", json={
-            "title": "New Title",
-            "modified_by": "alice",
-        })
+        res = client.patch(
+            f"/documents/{doc_id}/title",
+            json={
+                "title": "New Title",
+                "modified_by": "alice",
+            },
+        )
         assert res.status_code == 200
         assert res.json()["title"] == "New Title"
 
         versions = client.get(f"/documents/{doc_id}/versions").json()
-        assert len(versions) == 1  # version count unchanged
+        assert len(versions) == 1
 
     def test_update_title_creates_audit_log_entry(self, client):
         doc = _create_doc(client, title="Rename Me")
@@ -153,8 +186,6 @@ class TestMetadataUpdate:
         actions = [log["action"] for log in timeline]
         assert "UPDATE_TITLE" in actions
 
-
-# ── 5. Document deletion ──────────────────────────────────────────────────────
 
 class TestDocumentDeletion:
     def test_soft_delete_removes_from_list(self, client):
@@ -173,12 +204,9 @@ class TestDocumentDeletion:
         client.delete(f"/documents/{doc['id']}?modified_by=alice")
 
         timeline = client.get(f"/documents/{doc['id']}/timeline").json()
-        # Timeline is still accessible after soft-delete via direct endpoint
         actions = [log["action"] for log in timeline]
         assert "DELETE_DOCUMENT" in actions
 
-
-# ── 6. Version deletion ───────────────────────────────────────────────────────
 
 class TestVersionDeletion:
     def test_cannot_delete_final_version(self, client):
@@ -190,10 +218,13 @@ class TestVersionDeletion:
     def test_can_delete_non_final_version(self, client):
         doc = _create_doc(client, content="Version one content.")
         doc_id = doc["id"]
-        client.post(f"/documents/{doc_id}/versions", json={
-            "content": "Version two content, totally different.",
-            "modified_by": "alice",
-        })
+        client.post(
+            f"/documents/{doc_id}/versions",
+            json={
+                "content": "Version two content, totally different.",
+                "modified_by": "alice",
+            },
+        )
 
         res = client.delete(f"/documents/{doc_id}/versions/1?modified_by=alice")
         assert res.status_code == 204
