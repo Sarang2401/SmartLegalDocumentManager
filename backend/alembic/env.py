@@ -19,7 +19,9 @@ config = context.config
 _db_url = settings.DATABASE_URL
 if _db_url.startswith("postgresql://"):
     _db_url = _db_url.replace("postgresql://", "postgresql+psycopg://", 1)
-config.set_main_option("sqlalchemy.url", _db_url)
+
+# Escape % signs so configparser doesn't try to interpolate them
+config.set_main_option("sqlalchemy.url", _db_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

@@ -125,6 +125,8 @@ API_URL=https://my-backend.example.com/documents python cli.py history <doc-uuid
 
 ## Setup & Deployment
 
+> **Are you evaluating or testing this project?** Please see our comprehensive [Testing & Evaluation Guide](TESTING_GUIDE.md) for step-by-step instructions on setting up from scratch and exploring both the CLI and Web Dashboard.
+
 ### Prerequisites
 - Python 3.11+
 - PostgreSQL 14+

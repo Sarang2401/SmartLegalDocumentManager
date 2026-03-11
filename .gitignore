@@ -1,0 +1,15 @@
+# Environments
+.env
+.env.*
+.venv
+__pycache__/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
