@@ -40,7 +40,7 @@ cp .env.example .env
 # Edit `.env` and update the `DATABASE_URL` with your credentials:
 # The checked-in example uses a placeholder password and will fail until you replace it.
 # Make sure to URL-encode special characters like @ in your password (e.g., %40).
-# Example: DATABASE_URL=postgresql://postgres:Sarang%402401@localhost:5432/legal_doc_manager
+# Example: DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/legal_doc_manager
 
 # 4. Verify the database connection before running migrations
 python test_db.py
