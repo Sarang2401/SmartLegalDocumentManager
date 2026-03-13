@@ -10,7 +10,7 @@ import type {
     PreviewRequestPayload,
 } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/documents';
+const DEFAULT_DEV_API_BASE = 'http://localhost:8000/documents';
 
 export class ApiError extends Error {
     public status?: number;
@@ -21,13 +21,47 @@ export class ApiError extends Error {
     }
 }
 
+export class ApiConfigurationError extends Error {}
+
+function isLocalApiUrl(value: string): boolean {
+    try {
+        const { hostname } = new URL(value);
+        return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+    } catch {
+        return false;
+    }
+}
+
+function getApiBase(): string {
+    const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
+
+    if (configuredBase) {
+        if (import.meta.env.PROD && isLocalApiUrl(configuredBase)) {
+            throw new ApiConfigurationError(
+                'Invalid VITE_API_BASE_URL for production. Point it to the deployed backend, for example https://legal-doc-api-u6pb.onrender.com/documents.',
+            );
+        }
+
+        return configuredBase.replace(/\/+$/, '');
+    }
+
+    if (!import.meta.env.PROD) {
+        return DEFAULT_DEV_API_BASE;
+    }
+
+    throw new ApiConfigurationError(
+        'Missing VITE_API_BASE_URL in production. Set it to the deployed backend URL ending with /documents.',
+    );
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const apiBase = getApiBase();
     const headers = {
         'Content-Type': 'application/json',
         ...(options.headers || {}),
     };
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const response = await fetch(`${apiBase}${endpoint}`, {
         ...options,
         headers,
     });

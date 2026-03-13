@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Plus, Trash2, Clock, User, FolderOpen, TrendingUp, Shield } from 'lucide-react';
-import { api } from '../api/client';
+import { api, ApiConfigurationError } from '../api/client';
 import type { DocumentResponse } from '../types';
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
@@ -28,7 +28,11 @@ export const Dashboard = () => {
             const docs = await api.getDocuments();
             setDocuments(docs);
         } catch (err) {
-            setError('Unable to reach the backend. Is the server running?');
+            if (err instanceof ApiConfigurationError) {
+                setError(err.message);
+            } else {
+                setError('Unable to reach the backend. Check VITE_API_BASE_URL and confirm the backend is reachable.');
+            }
             console.error(err);
         } finally {
             setLoading(false);
