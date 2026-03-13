@@ -2,6 +2,8 @@
 Unit tests for document_service business logic.
 """
 
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 
@@ -14,6 +16,17 @@ def _create_doc(
     res = client.post("/documents", json={"title": title, "content": content, "created_by": user})
     assert res.status_code == 201, res.text
     return res.json()
+
+
+class TestHealthRoutes:
+    def test_root_supports_head_requests(self, client):
+        res = client.head("/")
+        assert res.status_code == 200
+
+    def test_health_check_returns_healthy(self, client):
+        res = client.get("/health")
+        assert res.status_code == 200
+        assert res.json()["status"] == "healthy"
 
 
 class TestVersionCreation:
@@ -61,6 +74,23 @@ class TestVersionCreation:
         timeline = client.get(f"/documents/{doc['id']}/timeline").json()
         actions = [log["action"] for log in timeline]
         assert "CREATE_DOCUMENT" in actions
+
+    def test_upload_version_updates_document_activity_timestamp(self, client):
+        doc = _create_doc(client, title="Timestamp Check", content="Initial draft.")
+        initial_updated_at = datetime.fromisoformat(doc["updated_at"])
+
+        res = client.post(
+            f"/documents/{doc['id']}/versions",
+            json={
+                "content": "Initial draft with a new payment clause.",
+                "modified_by": "carol",
+            },
+        )
+        assert res.status_code == 201
+
+        docs = client.get("/documents").json()
+        updated_doc = next(d for d in docs if d["id"] == doc["id"])
+        assert datetime.fromisoformat(updated_doc["updated_at"]) > initial_updated_at
 
 
 class TestIdenticalContentDetection:
@@ -233,3 +263,55 @@ class TestVersionDeletion:
         version_numbers = [v["version_number"] for v in versions]
         assert 1 not in version_numbers
         assert 2 in version_numbers
+
+        timeline = client.get(f"/documents/{doc_id}/timeline").json()
+        delete_logs = [log for log in timeline if log["action"] == "DELETE_VERSION"]
+        assert delete_logs
+        assert delete_logs[-1]["version_id"] is not None
+
+    def test_delete_version_updates_document_activity_timestamp(self, client):
+        doc = _create_doc(client, content="Version one content.")
+        doc_id = doc["id"]
+        client.post(
+            f"/documents/{doc_id}/versions",
+            json={
+                "content": "Version two content, totally different.",
+                "modified_by": "alice",
+            },
+        )
+        docs_before_delete = client.get("/documents").json()
+        before_delete = next(d for d in docs_before_delete if d["id"] == doc_id)
+        before_timestamp = datetime.fromisoformat(before_delete["updated_at"])
+
+        res = client.delete(f"/documents/{doc_id}/versions/1?modified_by=alice")
+        assert res.status_code == 204
+
+        docs_after_delete = client.get("/documents").json()
+        after_delete = next(d for d in docs_after_delete if d["id"] == doc_id)
+        assert datetime.fromisoformat(after_delete["updated_at"]) > before_timestamp
+
+    def test_version_numbers_remain_monotonic_after_soft_delete(self, client):
+        doc = _create_doc(client, content="Version one content.")
+        doc_id = doc["id"]
+        second = client.post(
+            f"/documents/{doc_id}/versions",
+            json={
+                "content": "Version two content.",
+                "modified_by": "alice",
+            },
+        )
+        assert second.status_code == 201
+        assert second.json()["version_number"] == 2
+
+        delete_res = client.delete(f"/documents/{doc_id}/versions/2?modified_by=alice")
+        assert delete_res.status_code == 204
+
+        third = client.post(
+            f"/documents/{doc_id}/versions",
+            json={
+                "content": "Version three content.",
+                "modified_by": "alice",
+            },
+        )
+        assert third.status_code == 201
+        assert third.json()["version_number"] == 3

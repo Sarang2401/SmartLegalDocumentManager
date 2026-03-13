@@ -4,6 +4,7 @@ All direct SQLAlchemy queries live here. The service layer calls these
 functions; routes never touch the DB directly.
 """
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -39,6 +40,13 @@ def get_all_documents(db: Session) -> list[Document]:
     )
 
 
+def touch_document_activity(db: Session, doc: Document) -> Document:
+    """Mark a document as recently changed by meaningful user activity."""
+    doc.updated_at = datetime.utcnow()
+    db.add(doc)
+    return doc
+
+
 # ── DocumentVersion ───────────────────────────────────────────────────────────
 
 def create_version(
@@ -59,43 +67,68 @@ def create_version(
     return version
 
 
-def get_latest_version(db: Session, document_id: UUID) -> Optional[DocumentVersion]:
-    return (
-        db.query(DocumentVersion)
-        .filter(DocumentVersion.document_id == document_id)
-        .order_by(DocumentVersion.version_number.desc())
-        .first()
-    )
+def get_latest_version(
+    db: Session,
+    document_id: UUID,
+    include_deleted: bool = False,
+) -> Optional[DocumentVersion]:
+    query = db.query(DocumentVersion).filter(DocumentVersion.document_id == document_id)
+    if not include_deleted:
+        query = query.filter(DocumentVersion.is_deleted == False)  # noqa: E712
+    return query.order_by(DocumentVersion.version_number.desc()).first()
 
 
 def get_versions(db: Session, document_id: UUID) -> list[DocumentVersion]:
     return (
         db.query(DocumentVersion)
-        .filter(DocumentVersion.document_id == document_id)
+        .filter(
+            DocumentVersion.document_id == document_id,
+            DocumentVersion.is_deleted == False,  # noqa: E712
+        )
         .order_by(DocumentVersion.version_number)
         .all()
     )
 
 
 def get_version_by_number(
-    db: Session, document_id: UUID, version_number: int
+    db: Session,
+    document_id: UUID,
+    version_number: int,
+    include_deleted: bool = False,
 ) -> Optional[DocumentVersion]:
-    return (
+    query = (
         db.query(DocumentVersion)
         .filter(
             DocumentVersion.document_id == document_id,
             DocumentVersion.version_number == version_number,
         )
-        .first()
     )
+    if not include_deleted:
+        query = query.filter(DocumentVersion.is_deleted == False)  # noqa: E712
+    return query.first()
 
 
 def count_versions(db: Session, document_id: UUID) -> int:
     return (
         db.query(DocumentVersion)
-        .filter(DocumentVersion.document_id == document_id)
+        .filter(
+            DocumentVersion.document_id == document_id,
+            DocumentVersion.is_deleted == False,  # noqa: E712
+        )
         .count()
     )
+
+
+def soft_delete_version(
+    db: Session,
+    version: DocumentVersion,
+    deleted_by: str,
+) -> DocumentVersion:
+    version.is_deleted = True
+    version.deleted_at = datetime.utcnow()
+    version.deleted_by = deleted_by
+    db.add(version)
+    return version
 
 
 # ── AuditLog ──────────────────────────────────────────────────────────────────

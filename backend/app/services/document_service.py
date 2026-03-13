@@ -193,7 +193,8 @@ def upload_version(
     if latest and _normalise(latest.content) == _normalise(content):
         raise ValueError("No meaningful change detected.")
 
-    next_number = (latest.version_number + 1) if latest else 1
+    latest_any_state = repo.get_latest_version(db, document_id, include_deleted=True)
+    next_number = (latest_any_state.version_number + 1) if latest_any_state else 1
     version = repo.create_version(
         db,
         document_id=document_id,
@@ -210,6 +211,7 @@ def upload_version(
         version_id=version.id,
     )
 
+    repo.touch_document_activity(db, doc)
     db.commit()
     db.refresh(version)
 
@@ -288,7 +290,8 @@ def restore_version(
     if latest and _normalise(latest.content) == _normalise(ver_to_restore.content):
         raise ValueError("Cannot restore: current latest version already matches the selected version.")
 
-    next_number = (latest.version_number + 1) if latest else 1
+    latest_any_state = repo.get_latest_version(db, document_id, include_deleted=True)
+    next_number = (latest_any_state.version_number + 1) if latest_any_state else 1
     new_version = repo.create_version(
         db,
         document_id=document_id,
@@ -305,6 +308,7 @@ def restore_version(
         version_id=new_version.id,
     )
 
+    repo.touch_document_activity(db, doc)
     db.commit()
     db.refresh(new_version)
 
@@ -359,6 +363,7 @@ def update_title(db: Session, document_id: UUID, new_title: str, modified_by: st
         raise ValueError("Document not found.")
 
     doc.title = new_title
+    repo.touch_document_activity(db, doc)
     repo.create_audit_log(
         db,
         document_id=document_id,
@@ -377,6 +382,7 @@ def delete_document(db: Session, document_id: UUID, modified_by: str) -> None:
         raise ValueError("Document not found.")
 
     doc.is_deleted = True
+    repo.touch_document_activity(db, doc)
     repo.create_audit_log(
         db,
         document_id=document_id,
@@ -387,7 +393,7 @@ def delete_document(db: Session, document_id: UUID, modified_by: str) -> None:
 
 
 def delete_version(db: Session, document_id: UUID, version_number: int, modified_by: str) -> None:
-    """Hard delete a specific version. Cannot delete the final remaining version."""
+    """Soft delete a specific version. Cannot delete the final remaining active version."""
     doc = repo.get_document(db, document_id)
     if doc is None:
         raise ValueError("Document not found.")
@@ -408,7 +414,8 @@ def delete_version(db: Session, document_id: UUID, version_number: int, modified
         version_id=ver.id,
     )
 
-    db.delete(ver)
+    repo.soft_delete_version(db, ver, modified_by)
+    repo.touch_document_activity(db, doc)
     db.commit()
 
 

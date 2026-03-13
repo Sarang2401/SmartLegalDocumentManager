@@ -25,6 +25,12 @@ app.add_middleware(
 app.include_router(documents_router)
 
 
+@app.api_route("/", methods=["GET", "HEAD"], tags=["Health"])
+def root():
+    """Root endpoint for platform probes."""
+    return {"status": "healthy", "app": settings.APP_NAME}
+
+
 @app.get("/health", tags=["Health"])
 def health_check():
     """Simple health check endpoint."""

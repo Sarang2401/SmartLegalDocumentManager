@@ -1,32 +1,27 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
+from sqlalchemy.exc import OperationalError
 
-# ── App imports ──────────────────────────────────────────────────────────────
-# Make sure DATABASE_URL is read from our settings so we don't repeat it here.
 from app.config import settings
-import app.models  # noqa: F401 — registers all ORM models with Base.metadata
+from app.db_url import (
+    normalize_database_url,
+    placeholder_password_error,
+    uses_placeholder_password,
+)
+import app.models  # noqa: F401
 from app.database import Base
 
-# ── Alembic config ───────────────────────────────────────────────────────────
+
 config = context.config
 
-# Override sqlalchemy.url with the value from our app settings
-# so we have a single source of truth (the .env file).
-_db_url = settings.DATABASE_URL
-if _db_url.startswith("postgresql://"):
-    _db_url = _db_url.replace("postgresql://", "postgresql+psycopg://", 1)
-
-# Escape % signs so configparser doesn't try to interpolate them
+_db_url = normalize_database_url(settings.DATABASE_URL)
 config.set_main_option("sqlalchemy.url", _db_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Autogenerate migrations from our models
 target_metadata = Base.metadata
 
 
@@ -45,18 +40,29 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations with a live DB connection."""
+    if uses_placeholder_password(settings.DATABASE_URL):
+        raise RuntimeError(placeholder_password_error())
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-        )
-        with context.begin_transaction():
-            context.run_migrations()
+
+    try:
+        with connectable.connect() as connection:
+            context.configure(connection=connection, target_metadata=target_metadata)
+            with context.begin_transaction():
+                context.run_migrations()
+    except OperationalError as exc:
+        message = str(exc.orig if getattr(exc, "orig", None) else exc)
+        if "password authentication failed" in message.lower():
+            raise RuntimeError(
+                "PostgreSQL rejected the username/password from DATABASE_URL. "
+                "Update backend/.env with the real password for that user, then rerun "
+                "`alembic upgrade head`."
+            ) from exc
+        raise
 
 
 if context.is_offline_mode():

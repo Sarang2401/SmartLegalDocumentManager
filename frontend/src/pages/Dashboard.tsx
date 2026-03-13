@@ -6,7 +6,7 @@ import type { DocumentResponse } from '../types';
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
-import mammoth from 'mammoth/mammoth.browser';
+import { readLegalDocumentFile } from '../features/documents/utils/fileParsing';
 
 export const Dashboard = () => {
     const [documents, setDocuments] = useState<DocumentResponse[]>([]);
@@ -206,21 +206,10 @@ export const Dashboard = () => {
                                     const file = e.target.files?.[0];
                                     if (!file) return;
 
-                                    if (file.name.endsWith('.docx')) {
-                                        const r = new FileReader();
-                                        r.onload = async (ev) => {
-                                            try {
-                                                const res = await mammoth.extractRawText({ arrayBuffer: ev.target?.result as ArrayBuffer });
-                                                setNewContent(res.value);
-                                            } catch (err) {
-                                                alert("Error extracting text from DOCX");
-                                            }
-                                        };
-                                        r.readAsArrayBuffer(file);
-                                    } else {
-                                        const r = new FileReader();
-                                        r.onload = ev => setNewContent(ev.target?.result as string);
-                                        r.readAsText(file);
+                                    try {
+                                        setNewContent(await readLegalDocumentFile(file));
+                                    } catch (err) {
+                                        alert(err instanceof Error ? err.message : 'Error extracting text from uploaded file');
                                     }
                                 }} />
                                 📎 Upload .txt or .docx file

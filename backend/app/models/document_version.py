@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -25,6 +25,9 @@ class DocumentVersion(Base):
     content = Column(Text, nullable=False)
     created_by = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    is_deleted = Column(Boolean, default=False, nullable=False, index=True)
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by = Column(String(255), nullable=True)
 
     # Relationships
     document = relationship("Document", back_populates="versions")

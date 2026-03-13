@@ -140,9 +140,17 @@ cd backend
 # Install dependencies
 pip install -r requirements.txt
 
+# Create the database once using your local PostgreSQL account
+# Example:
+# psql -U postgres -c "CREATE DATABASE legal_doc_manager;"
+
 # Configure environment
 cp .env.example .env
+# Replace the placeholder password in DATABASE_URL with your real PostgreSQL credentials
 # Edit .env → set DATABASE_URL to your PostgreSQL connection string
+
+# Verify the database connection before running migrations
+python test_db.py
 
 # Run database migrations
 alembic upgrade head
@@ -184,7 +192,7 @@ python -m pytest tests/ -v
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://...@localhost:5432/legal_doc_manager` | Production DB |
+| `DATABASE_URL` | `postgresql://postgres:<real-password>@localhost:5432/legal_doc_manager` | Production DB |
 | `TEST_DATABASE_URL` | `postgresql+psycopg://...@localhost:5432/legal_doc_manager_test` | Test DB |
 | `APP_NAME` | `Smart Legal Document Manager` | API title |
 | `DEBUG` | `False` | SQLAlchemy echo mode |
@@ -332,9 +340,17 @@ cd backend
 # Install dependencies
 pip install -r requirements.txt
 
+# Create the database once using your local PostgreSQL account
+# Example:
+# psql -U postgres -c "CREATE DATABASE legal_doc_manager;"
+
 # Configure environment
 cp .env.example .env
+# Replace the placeholder password in DATABASE_URL with your real PostgreSQL credentials
 # Edit .env → set DATABASE_URL to your PostgreSQL connection string
+
+# Verify the database connection before running migrations
+python test_db.py
 
 # Run database migrations
 alembic upgrade head
@@ -348,9 +364,12 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
+cp .env.example .env
 npm run dev        # Development server → http://localhost:5173
 npm run build      # Production build → dist/
 ```
+
+The frontend reads `VITE_API_BASE_URL` from `frontend/.env`. The checked-in example points to the local backend at `http://localhost:8000/documents`, which is required for the AI-assisted comparison summary to work in a fresh clone.
 
 ### Running Tests
 
@@ -376,11 +395,12 @@ python -m pytest tests/ -v
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://...@localhost:5432/legal_doc_manager` | Production DB |
+| `DATABASE_URL` | `postgresql://postgres:<real-password>@localhost:5432/legal_doc_manager` | Production DB |
 | `TEST_DATABASE_URL` | `postgresql+psycopg://...@localhost:5432/legal_doc_manager_test` | Test DB |
 | `APP_NAME` | `Smart Legal Document Manager` | API title |
 | `DEBUG` | `False` | SQLAlchemy echo mode |
 | `API_URL` | `http://localhost:8000/documents` | CLI backend URL |
+| `VITE_API_BASE_URL` | `http://localhost:8000/documents` | Frontend backend URL |
 
 ---
 
